@@ -287,3 +287,93 @@ Correlation <- LonWardProfiles %>%
 rplot(Correlation)
 ```
 
+```{r}
+vif(model2)
+position <- c(10:74)
+
+Correlation_all<- LonWardProfiles %>%
+  st_drop_geometry()%>%
+  dplyr::select(position)%>%
+    correlate()
+
+rplot(Correlation_all)
+```
+
+```{r}
+#print some model diagnositcs. 
+par(mfrow=c(2,2))    #plot to 2 by 2 array
+plot(model2)
+library(performance)
+check_model(model2, check="all")
+```
+
+```{r}
+#run durbin-watson test
+DW <- durbinWatsonTest(model2)
+tidy(DW)
+#now plot the residuals
+tmap_mode("view")
+#qtm(LonWardProfiles, fill = "model1_resids")
+
+tm_shape(LonWardProfiles) +
+  tm_polygons("model2resids",
+              palette = "RdYlBu") +
+tm_shape(lond_sec_schools_sf) + tm_dots(col = "TYPE")
+```
+
+```{r}
+#calculate the centroids of all Wards in London
+coordsW <- LonWardProfiles%>%
+  st_centroid()%>%
+  st_geometry()
+
+plot(coordsW)
+
+#Now we need to generate a spatial weights matrix 
+#(remember from the lecture a couple of weeks ago). 
+#We'll start with a simple binary matrix of queen's case neighbours
+
+LWard_nb <- LonWardProfiles %>%
+  poly2nb(., queen=T)
+
+#or nearest neighbours
+knn_wards <-coordsW %>%
+  knearneigh(., k=4)
+
+LWard_knn <- knn_wards %>%
+  knn2nb()
+
+#plot them
+plot(LWard_nb, st_geometry(coordsW), col="red")
+
+plot(LWard_knn, st_geometry(coordsW), col="blue")
+```
+
+```{r}
+#create a spatial weights matrix object from these weights
+
+Lward.queens_weight <- LWard_nb %>%
+  nb2listw(., style="W")
+
+Lward.knn_4_weight <- LWard_knn %>%
+  nb2listw(., style="W")
+
+Queen <- LonWardProfiles %>%
+  st_drop_geometry()%>%
+  dplyr::select(model2resids)%>%
+  pull()%>%
+  moran.test(., Lward.queens_weight)%>%
+  tidy()
+
+Nearest_neighbour <- LonWardProfiles %>%
+  st_drop_geometry()%>%
+  dplyr::select(model2resids)%>%
+  pull()%>%
+  moran.test(., Lward.knn_4_weight)%>%
+  tidy()
+
+Queen
+
+Nearest_neighbour
+```
+
